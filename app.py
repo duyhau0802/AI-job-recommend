@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 from flask_cors import CORS
 import json
-
+import mysql.connector
 app = Flask(__name__)
 CORS(app)
 
@@ -48,7 +48,7 @@ def load_and_preprocess_data(csv_file, pickle_file):
 
     return df, tdif, tdif_matrix
 
-csv_file = './saved_job_data_2.csv'
+csv_file = './job_data.csv'
 pickle_file = 'preprocessed_data.pkl'
 df, tdif, tdif_matrix = load_and_preprocess_data(csv_file, pickle_file)
 
@@ -86,6 +86,40 @@ def get_recommendation(title, cosine_sim=cosine_sim):
         print(f"Job title '{title}' not found in the data.")
         return []
 
+def save_recommendation():
+    try:
+        # Connect to the MySQL database
+        connection = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="tuyendung",
+        )
+
+        # Create a cursor object
+        cursor = connection.cursor()
+
+        # Define the SQL query to select data from your table
+        sql_query = "SELECT `vi_tri`, `mo_ta`, `address_cong_viec` FROM `jobs`" 
+
+        # Execute the query
+        cursor.execute(sql_query)
+
+        # Fetch all results as a list of tuples
+        data = cursor.fetchall()
+
+        # # Create a DataFrame from the fetched data
+        dfDB = pd.DataFrame(data, columns=[col[0] for col in cursor.description], index=None)  # Extract column names
+        dfDB.rename(columns={'vi_tri': 'jobTitle', 'mo_ta': 'jobdescription', 'address_cong_viec': 'joblocation_address'}, inplace=True)
+        dfDB.to_csv('dataStore.csv', index=True, header=True)
+        return True
+    except mysql.connector.Error as err:
+        print(f"Error connecting to database: {err}")
+        return False
+    finally:
+        if connection:
+            connection.close()
+            cursor.close()
 
 @app.route('/recommend', methods=['POST'])
 def recommend_jobs():
@@ -98,5 +132,12 @@ def recommend_jobs():
     recommended_jobs = get_recommendation(job_title)
     return jsonify(recommended_jobs)
 
+@app.route('/saveDataRecommend', methods=['GET'])
+def saveDataRecommend():
+    saveDataSuccess = save_recommendation()
+    if saveDataSuccess:
+        return jsonify({'message': 'Data saved successfully'})
+    else:
+        return jsonify({'message': 'Failed to save data'})
 if __name__ == '__main__':
     app.run(debug=True)
